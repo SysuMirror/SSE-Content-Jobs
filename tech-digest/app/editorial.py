@@ -197,17 +197,22 @@ def _original_url(value, packet):
 
 
 def _research_prompt(item, url, view, omitted):
+    # 契约置顶（2026-10-25）：schema 放在最前、风格指令降为字段说明——qwen 面对长
+    # 写作指令+尾部 schema 时会无视 JSON 契约直接产出正文（10-25 当日 2/4 实录）。
     return (
-        "阅读结构化来源，输出研究笔记。判断是否有足够方法与支持材料；只有摘要必须false。"
-        "理论文章用假设/推导/证明，系统文章用测量/架构约束，不能强制编造实验。"
-        "is_secondary表示是否主要转述别人的论文；如是，提供original_paper_url以便读原论文。"
-        "evidence必须引用真实block_id，quote若存在必须逐字来自该块。"
-        "缺失的关键图表、证明、方法或结果要让source_complete=false。被省略块不能充当证据。\n"
+        "只输出一个 JSON 对象（以 { 开头、以 } 结尾），不要输出 Markdown 正文或解释文字。结构：\n"
         '{"article_type":"research","content_purpose":"knowledge","evidence_kind":"empirical|theoretical|engineering_measurement",'
         '"source_complete":true,"is_secondary":false,"original_paper_url":null,'
         '"research_checks":{"problem":"","method":"","support":"","conditions":"","limits":""},'
         '"evidence":[{"id":"e1","block_id":"b1","statement":"","quote":""}],'
         '"key_points":[],"learning_question":""}\n'
+        "填写要求：阅读结构化来源，判断是否有足够方法与支持材料；只有摘要必须 source_complete=false。"
+        "理论文章用假设/推导/证明，系统文章用测量/架构约束，不能强制编造实验。"
+        "is_secondary表示是否主要转述别人的论文；如是，提供original_paper_url以便读原论文。"
+        "evidence必须引用真实block_id，quote若存在必须逐字来自该块。"
+        "缺失的关键图表、证明、方法或结果要让source_complete=false。被省略块不能充当证据。"
+        "research_checks 五个字段都必须是非空字符串。\n"
+        "【来源材料】\n"
         + json.dumps({"title": item.get("title"), "url": url, "omitted_block_ids": omitted, "blocks": view}, ensure_ascii=False)
     )
 
@@ -339,19 +344,30 @@ def deep_research(top, pool=None, dry_run=False, resolve_primary=True):
 
 def _author(item, packet, research, feedback=None):
     view, omitted = _evidence_view(packet)
+    # 契约置顶（2026-10-25）：qwen 面对长写作指令+尾部 schema 会无视 JSON 契约直接
+    # 产出成品 Markdown 文（10-15/10-25 多日实录），并曾两次凭空断言「原作者未署名」
+    # 被终审拦下（10-22/10-25）——契约与纪律条款全部前置，风格指令降为字段说明。
     prompt = (
-        "写一篇能学到知识的中文技术正文。第一屏150字内直接说明问题、主要结论与读完收获。"
-        "research建议1200–2000字，mechanism1000–1800字，experiment800–1500字；避免凑字数。"
+        "只输出一个 JSON 对象（以 { 开头、以 } 结尾），禁止把文章作为 Markdown 正文直接输出——"
+        "全部正文都写进 sections[].markdown 字段的字符串值里。结构：\n"
+        '{"article_type":"research","title":"具体问题式标题，30字内","post_titles":[""],'
+        '"learning_question":"","prerequisites":[""],'
+        '"opening":"第一屏150字内：问题、主要结论与读完收获",'
+        '"sections":[{"heading":"","markdown":"本节正文，字符串值内可用标准Markdown'
+        '（加粗/列表/引用/分隔线/代码/链接），表格最多3列","evidence_ids":["e1"]}],'
+        '"limitation":"","takeaway":"","evidence_ids":["e1"]}\n'
+        "写作要求：research建议1200–2000字，mechanism1000–1800字，experiment800–1500字；避免凑字数。"
         "正文依次解释问题、方法或对照、具体证据、机制线索、局限、能带走的认识。"
-        "短段落，每段一个意思；首次出现术语用一句白话解释；标题用具体问题，30字内。"
-        "只用标准Markdown标题、加粗、列表、引用、分隔线、代码和链接。表格最多3列。"
+        "短段落，每段一个意思；首次出现术语用一句白话解释。"
         "不输出HTML、装饰卡片、广告、资源推荐或大段操作步骤；不全量翻译论文。"
         "所有数字注明来源中的模型版本、数据集与条件；旧论文不可伪装今天发布。"
         "原文实验写‘作者报告’，我们的状态固定not_independently_tested，禁止编造实测。"
-        "不复制大段原文，用自己的话解释；结果不足时明确指出，不能补造。\n"
-        '{"article_type":"research","title":"","post_titles":[],"learning_question":"",'
-        '"prerequisites":[],"opening":"","sections":[{"heading":"","markdown":"","evidence_ids":["e1"]}],'
-        '"limitation":"","takeaway":"","evidence_ids":["e1"]}\n'
+        "不复制大段原文，用自己的话解释；结果不足时明确指出，不能补造。"
+        "title/learning_question/opening/limitation/takeaway 都必须是非空字符串。\n"
+        "署名纪律：来源材料明确列出的作者/团队必须如实转述；材料里没有署名信息时，"
+        "禁止写「原作者未署名」之类断言，直接不提署名。"
+        "日期纪律：文中提到的原文日期一律照抄来源材料给出的日期，不做时区换算。"
+        "evidence_ids 只能引用研究笔记 evidence 里真实存在的 id，至少一条。\n"
         + json.dumps({"item": item, "research": {k: v for k, v in research.items() if k != "source_packet"}, "source_blocks": view, "omitted_block_ids": omitted,
                       "revision_feedback": feedback}, ensure_ascii=False)
     )
@@ -373,9 +389,54 @@ def _author(item, packet, research, feedback=None):
         if isinstance(data, dict) and data.get("sections"):
             return data
         last = {"err": "输出不是合法 JSON" if data is None else "JSON 缺少 sections 字段",
-                "head": str(content)[:80].replace(chr(10), " ")}
+                "head": str(content)[:80].replace(chr(10), " "), "text": content}
         log.warning("author 输出不符合 JSON 契约（%s），带错误重试：%s", last["err"], last["head"])
+    # 裸 Markdown 抢救（2026-10-25）：3 次调用仍违约时，违约形态实证=直接产出成品
+    # 文（内容可用只是没包 JSON）。确定性包装成降级稿交终审语义把关——宁可降级
+    # 过审也不开天窗（10-22/10-25 三天 skip_quality 复盘）。
+    salvaged = _salvage_markdown_draft(last.get("text"), research)
+    if salvaged:
+        log.warning("author 3 次未过 JSON 契约，已抢救裸 Markdown 为降级稿（终审把关）")
+        return salvaged
     return None
+
+
+def _salvage_markdown_draft(content, research):
+    """把 author 违约产出的裸 Markdown 确定性包装成合法 draft。
+    证据绑定取研究笔记全部有效 evidence id（保守全绑，关联性由终审独立评价）；
+    结构或长度不达标返回 None（维持 author_unavailable 原语义）。"""
+    if not isinstance(content, str):
+        return None
+    lines = content.strip().splitlines()
+    title, body_start = "", 0
+    for i, ln in enumerate(lines[:5]):
+        s = ln.strip()
+        if s.startswith("# "):
+            title = s[2:].strip()
+            body_start = i + 1
+            break
+    paragraphs = [p.strip() for p in "\n".join(lines[body_start:]).split("\n\n") if p.strip()]
+    if not title or len(paragraphs) < 3 or sum(len(p) for p in paragraphs) < 600:
+        return None
+    evidence_ids = [e["id"] for e in (research.get("evidence") or [])
+                    if isinstance(e, dict) and isinstance(e.get("id"), str) and e["id"]]
+    if not evidence_ids:
+        return None
+    if len(title) > 30:
+        title = title[:30]
+    checks = research.get("research_checks") or {}
+    return {
+        "article_type": research.get("article_type") if research.get("article_type") in ARTICLE_TYPES else "research",
+        "title": title,
+        "post_titles": [title],
+        "learning_question": research.get("learning_question") or "这篇原文解决了什么问题、怎么解决",
+        "prerequisites": [],
+        "opening": paragraphs[0],
+        "sections": [{"heading": title, "markdown": "\n\n".join(paragraphs[1:]), "evidence_ids": evidence_ids}],
+        "limitation": checks.get("limits") if isinstance(checks.get("limits"), str) and checks["limits"].strip() else paragraphs[-1],
+        "takeaway": checks.get("problem") if isinstance(checks.get("problem"), str) and checks["problem"].strip() else paragraphs[-1],
+        "evidence_ids": evidence_ids,
+    }
 
 
 def review_draft(title, markdown, draft, packet):

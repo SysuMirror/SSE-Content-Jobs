@@ -469,6 +469,26 @@ class TestRetryContract(unittest.TestCase):
         self.assertEqual(result["status"], "ready")
         self.assertIn("证据契约不合格", prompts[2])   # 第 3 次调用=研究重试（judge→首轮→重试），带错误回喂
 
+    def test_author_salvages_markdown_after_three_contract_failures(self):
+        # 2026-10-25 三天 skip_quality 复盘：author 3 连违约=当天开天窗。违约形态
+        # 实证是裸 Markdown 成品文，抢救成降级稿交终审把关，不再直接报废。
+        c = candidate()
+        md = ("# 缓存机制如何避免重复计算\n\n"
+              + "固定输入场景下缓存命中可省去重复读取，本段解释命中路径与失效条件的关系，"
+                "并说明测量方法覆盖了哪些访问模式与对应的开销差异，帮助读者建立可复用的判断框架。" * 4 + "\n\n"
+              + "对照实验显示重复读取的开销集中在重复译码与重复校验两处，" * 4
+              + "缓存命中路径同时消解两类开销，收益随输入确定性上升。\n\n"
+              + "局限在于结论依赖固定输入假设，动态访问模式下失效条件会更频繁触发，"
+                "此时缓存的收益会显著下降，需要额外的失效策略配合才能维持效果。" * 3)
+        result = self.run_ready(c, [[judge_reply([c])], [research_reply()],
+                                    [md], [md], [md], [review_reply()]])
+        self.assertEqual(result["status"], "ready")
+        self.assertEqual(result["draft"]["evidence_ids"], ["e1", "e2", "e3"])
+
+    def test_salvage_keeps_author_unavailable_for_stub_output(self):
+        self.assertIsNone(editorial._salvage_markdown_draft("太短", {"evidence": []}))
+        self.assertIsNone(editorial._salvage_markdown_draft(None, {"evidence": [{"id": "e1"}]}))
+
     def test_review_retries_on_bad_json(self):
         c = candidate()
         result = self.run_ready(c, [[judge_reply([c])], [research_reply()], [author_reply()],
