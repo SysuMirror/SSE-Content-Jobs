@@ -489,6 +489,33 @@ class TestRetryContract(unittest.TestCase):
         self.assertIsNone(editorial._salvage_markdown_draft("太短", {"evidence": []}))
         self.assertIsNone(editorial._salvage_markdown_draft(None, {"evidence": [{"id": "e1"}]}))
 
+    def test_invented_evidence_ids_are_clamped_to_real_ones(self):
+        # 2026-10-25 01:15 与当日演练同款死法：author 引用研究笔记里不存在的
+        # evidence id。钳制保留真实引用，全虚构仍走校验拒绝。
+        c = candidate()
+        draft = json.loads(author_reply())
+        draft["evidence_ids"] = ["e1", "e9"]
+        draft["sections"] = [dict(s, evidence_ids=(["e2", "nope"] if i == 0 else list(s["evidence_ids"])))
+                             for i, s in enumerate(draft["sections"])]
+        result = self.run_ready(c, [[judge_reply([c])], [research_reply()], [json.dumps(draft)],
+                                    [review_reply()]])
+        self.assertEqual(result["status"], "ready")
+        self.assertEqual(result["draft"]["evidence_ids"], ["e1"])
+
+    def test_fully_invented_evidence_ids_still_fail_validation(self):
+        c = candidate()
+        draft = json.loads(author_reply())
+        draft["evidence_ids"] = ["e9"]
+        draft["sections"] = [dict(s, evidence_ids=["e9"]) for s in draft["sections"]]
+        with patch.object(editorial.llmpool, "map_chat",
+                          side_effect=[[judge_reply([c])], [research_reply()],
+                                       [json.dumps(draft)], [json.dumps(draft)]]), \
+                patch.object(editorial.extract, "fetch_with_mirror", return_value=article_packet()[0]):
+            self.pool.upsert_news([c])
+            result = editorial.run_pipeline([c], pool=self.pool)
+        self.assertEqual(result["status"], "skip_quality")
+        self.assertIn("missing_evidence", result["reasons"])
+
     def test_review_retries_on_bad_json(self):
         c = candidate()
         result = self.run_ready(c, [[judge_reply([c])], [research_reply()], [author_reply()],

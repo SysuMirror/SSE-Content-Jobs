@@ -570,6 +570,19 @@ def run_pipeline(candidates, preference=None, pool=None, dry_run=False, recent_t
                     break
                 draft.update(schema_version=SCHEMA_VERSION, source_url=packet["url"], source_hash=packet["source_hash"],
                              research_checks=notes.get("research_checks"), test_status="not_independently_tested")
+                # 证据 id 钳制（2026-10-25 演练实录）：qwen 会引用研究笔记里不存在的
+                # evidence id（10-25 01:15 与演练同款死法 missing_or_unbound_research_
+                # evidence）。只保留真实存在的 id；全部引用都虚构时维持校验拒绝原语义。
+                valid_ids = {e["id"] for e in (notes.get("evidence") or [])
+                             if isinstance(e, dict) and isinstance(e.get("id"), str) and e["id"]}
+                if valid_ids:
+                    refs = draft.get("evidence_ids")
+                    if isinstance(refs, list):
+                        draft["evidence_ids"] = [e for e in refs if isinstance(e, str) and e in valid_ids]
+                    for section in draft.get("sections") or []:
+                        if isinstance(section, dict) and isinstance(section.get("evidence_ids"), list):
+                            section["evidence_ids"] = [e for e in section["evidence_ids"]
+                                                       if isinstance(e, str) and e in valid_ids]
                 cands = draft.get("post_titles", [])
                 if not isinstance(cands, list):
                     cands = []
