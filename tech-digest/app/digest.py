@@ -488,9 +488,15 @@ def render_reader_article(draft: dict, source_packet: dict) -> str:
         parts.append(section["markdown"])
         parts.extend(additions.get(i, []))
     parts.extend(remaining)
-    author = _reader_source_text(source_packet.get("author"), "原作者未署名")
+    # 署名兜底（2026-10-26）：源页 meta 无 author 时**省略作者段**——此前兜底
+    # 「原作者未署名」是渲染器自己造的假话，终审天天把它当署名错误拦稿
+    # （10-22/25/26 三天实录，草稿里从未出现过这句话）。
+    author = _reader_source_text(source_packet.get("author"))
     source_title = _reader_source_text(source_packet.get("title"), "原文")
-    parts.extend(["---", f"来源：[{source_title}]({_reader_url(source_packet['url'])}) · {author}",
+    source_line = f"来源：[{source_title}]({_reader_url(source_packet['url'])})"
+    if author:
+        source_line += f" · {author}"
+    parts.extend(["---", source_line,
                   "原文日期：" + _reader_source_date(source_packet.get("published_at"))])
     version = _reader_source_text(source_packet.get("source_version"))
     if version:

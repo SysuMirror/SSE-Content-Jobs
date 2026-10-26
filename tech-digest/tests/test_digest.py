@@ -273,6 +273,17 @@ class TestReaderArticle(unittest.TestCase):
         self.assertIn("技术报告", md)
         self.assertIn("前置知识", md)
         self.assertIn("原作者", md)
+
+    def test_reader_omits_author_segment_when_source_has_none(self):
+        # 2026-10-26：渲染器兜底「原作者未署名」是自造假话，终审天天当署名错误
+        # 拦稿（10-22/25/26 三天实录，草稿里从未出现过这句话）——空署名省略作者段。
+        from tests.test_reader_preview import sample_packet
+        packet = sample_packet()
+        packet["source_packet"]["author"] = ""
+        md = self.render(packet)
+        self.assertNotIn("未署名", md)
+        self.assertIn("来源：", md)
+        self.assertIn("原文日期：", md)
         self.assertIn("未独立复现", md)
         self.assertIn("AI", md)
         self.assertNotIn("淘汰", md)
