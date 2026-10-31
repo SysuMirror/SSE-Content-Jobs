@@ -39,7 +39,8 @@ SOURCE_WEIGHT = {
     "netflix-tech": 8, "cloudflare": 8, "meta-eng": 8, "meituan-tech": 8,
     "nvidia-dev": 8, "nvidia-research": 8, "qwen-blog": 8, "openai-news": 6,
     # 2026-10-31 三类日报：实操教程源（DigitalOcean 官方教程 / 小众软件工具社区）
-    "digitalocean": 7, "appinn": 7,
+    # + 前沿 AI（量子位资讯 / GitHub topic 搜索仓库，star 即热度信号）
+    "digitalocean": 7, "appinn": 7, "qbitai": 6, "github-ai": 8,
 }
 DEFAULT_SOURCE_WEIGHT = 5
 HEAT_DEFAULT = 50.0          # 无热度信号的源（订阅系）保底可见分
@@ -89,7 +90,7 @@ def _heat_signal(it: dict) -> float | None:
     """源内热度信号（只用于排序，量纲无所谓）；None = 无信号 → 固定保底分。"""
     src = it.get("source") or ""
     t = it.get("trending") or {}
-    if src in ("hacker-news", "devto", "juejin"):
+    if src in ("hacker-news", "devto", "juejin", "github-ai"):
         pts = it.get("points") or 0
         return float(pts) if pts else None
     if src == "zhihu-hot":

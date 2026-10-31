@@ -47,6 +47,8 @@ OPENAI_URL = "https://openai.com/news/rss.xml"
 # DIY 未接、hellogithub/selfh.st 是月刊合集不是单篇教程未接）
 DIGITALOCEAN_URL = "https://www.digitalocean.com/community/tutorials/feed"
 APPINN_URL = "https://www.appinn.com/feed/"
+# 2026-10-31 前沿 AI 资讯（服务器实测 200；jiqizhixin RSS 返回 HTML 无标准 feed 弃）
+QBITAI_URL = "https://www.qbitai.com/feed"
 
 _NS_CONTENT = "{http://purl.org/rss/1.0/modules/content/}encoded"
 _NS_DC_CREATOR = "{http://purl.org/dc/elements/1.1/}creator"
@@ -213,3 +215,7 @@ def fetch_digitalocean() -> tuple[list[dict], str, dict]:
 
 def fetch_appinn() -> tuple[list[dict], str, dict]:
     return fetch_feed("appinn", APPINN_URL, 15)
+
+
+def fetch_qbitai() -> tuple[list[dict], str, dict]:
+    return fetch_feed("qbitai", QBITAI_URL, 12)

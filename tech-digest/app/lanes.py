@@ -31,15 +31,20 @@ TUTORIAL_LANE, REPO_LANE, DEEP_LANE = "tutorial", "repo", "deep"
 
 # judge 实操栏目提示与评分缓存盐（salt 让同一候选在两种视角下各存各的评分）
 TUTORIAL_HINT = (
-    "本次为实操栏目初筛：article_type=tutorial 的候选按 utility=步骤可跟做的完整度、"
+    "本次为实操栏目初筛：article_type=tutorial 的候选按 utility=步骤可执行完整度、"
     "audience=一个大学生的上手可行性评分——用自己电脑或免费资源就能跟做=8-10，"
-    "需要企业级集群/多卡 GPU/付费云才能跟做=4 以下；操作步骤本身不扣分；"
-    "research/mechanism/experiment 候选仍按研究标准评分。"
+    "需要企业级集群/多卡 GPU/付费云才能跟做=4 以下；操作步骤本身不扣分。"
+    "优先前沿 AI 项目的本地部署与使用（本地大模型、视频生成、推理框架、AI Agent 工具），"
+    "通用运维/旧工具/课程介绍/观看视频/学习路线降权（课程与资料汇总按 other 归类和低 utility）。"
+    "教程=含可执行命令或配置的分步操作指南；research/mechanism/experiment 仍按研究标准评分。"
 )
 TUTORIAL_MIN_TOTAL = 6.5
 # 上手可行性硬线（2026-10-31 首日复盘）：AICR K8s 企业运维指南 audience≥6 混进
 # 合格线，实操栏目仍发「距学生太远」的稿——audience 口径同 TUTORIAL_HINT，线提到 7。
 TUTORIAL_MIN_AUDIENCE = 7
+# 前沿 AI 仓库源（github_ai 搜索）：README 即带命令的部署指南，judge 常归
+# resource——该源在实操栏目里 tutorial/resource 都收，内容质量由命令闸把关。
+FRONTIER_REPO_SOURCES = {"github-ai"}
 CONTRACT_RETRIES = 2          # 首调之外最多带错误回喂次数（author/research 同款语义）
 PROMPT_TEXT_CAP = 18_000
 MAX_TRIED_CANDIDATES = 2
@@ -79,9 +84,14 @@ def _result(status: str, lane: str, reasons=None, **extra) -> dict:
 
 # ---------------- 选材 ----------------
 
-def tutorial_qualified(row: dict) -> bool:
-    """实操栏目质量线：judge 判为 tutorial 且实用/可信/受众过关（深度线不适用）。"""
-    if not isinstance(row, dict) or row.get("article_type") != TUTORIAL_LANE:
+def tutorial_qualified(row: dict, frontier_repo: bool = False) -> bool:
+    """实操栏目质量线：judge 判为 tutorial 且实用/可信/受众过关（深度线不适用）。
+
+    frontier_repo=True（github_ai 源）：judge 常把 README 部署指南归为 resource，
+    该源 tutorial/resource 都收——正文有没有命令由生产侧硬闸把关。
+    """
+    art = row.get("article_type") if isinstance(row, dict) else None
+    if art != TUTORIAL_LANE and not (frontier_repo and art in (TUTORIAL_LANE, "resource")):
         return False
     dims = row.get("dims")
     if not isinstance(dims, dict):
@@ -121,15 +131,20 @@ def _tutorial_prompt(item: dict, url: str, text: str) -> str:
         "只输出一个 JSON 对象（以 { 开头、以 } 结尾），禁止输出 Markdown 正文或解释文字。结构：\n"
         '{"title":"具体动作式标题，30字内","post_titles":["备选标题"],'
         '"learning_question":"读者跟做完能得到什么，一句话",'
+        '"environment":"适用系统/软件版本/前提条件，一句话",'
         '"prerequisites":["前置条件，没有则为空数组"],'
-        '"intro":"为什么值得动手+跟做完能做出什么，120字内",'
-        '"steps":[{"heading":"步骤名，10字内","text":"这步做什么、注意什么，80字内",'
-        '"command":"逐字摘自原文的命令或代码，该步没有则为空字符串"}],'
-        '"pitfalls":["原文明确提到的坑或注意事项，最多3条，没有则为空数组"],'
+        '"intro":"为什么值得动手+跟做完能做出什么，150字内",'
+        '"steps":[{"heading":"步骤名，10字内",'
+        '"text":"这步做什么、怎么做、做完应该看到什么（预期结果），100字内",'
+        '"command":"逐字摘自原文的命令/代码/配置，该步没有则为空字符串"}],'
+        '"troubleshooting":["原文明确提到的报错或坑及解决办法，最多4条，没有则为空数组"],'
+        '"pitfalls":["其他需要注意的事项，最多3条，没有则为空数组"],'
         '"takeaway":"一句话收尾，40字内"}\n'
-        "填写要求：全部内容只来自【原文材料】，原文没写的不编造；steps 为 1-8 步；"
-        "command 必须逐字复制原文里的命令或代码（不许改写、不许自创、不许拼接）；"
-        "面向大学生：术语首次出现用一句白话解释；不使用 emoji，不输出 HTML。\n"
+        "填写要求：这是给大学生照着做的完整操作指南，不是课程介绍或学习路线——"
+        "照着 steps 就能做出原文的成果：3-10 步，至少一条可执行命令或配置；"
+        "command 必须逐字复制原文（不许改写、自创、拼接）；每步 text 写清操作与预期结果；"
+        "原文没写的步骤不编造；troubleshooting 只写原文明确提到的；"
+        "面向大学生，术语首次出现用一句白话解释；不使用 emoji，不输出 HTML。\n"
         "【原文材料】\n" + json.dumps(material, ensure_ascii=False)
     )
 
@@ -138,13 +153,20 @@ def _tutorial_contract_issues(data) -> str:
     if not isinstance(data, dict):
         return "输出不是合法 JSON（必须只输出一个 JSON 对象，以 { 开头、以 } 结尾）"
     steps = data.get("steps")
-    if not isinstance(steps, list) or not steps:
-        return "缺少非空 steps 数组"
+    if not isinstance(steps, list) or len(steps) < 3:
+        return "steps 必须是至少 3 步的数组（完整操作指南，不是教程导读）"
+    if len(steps) > 12:
+        return "steps 超过 12 步，请合并相似步骤"
+    has_command = False
     for s in steps:
         if not isinstance(s, dict) or not str(s.get("heading") or "").strip():
             return "每个 step 必须有非空 heading"
         if not str(s.get("text") or "").strip() and not str(s.get("command") or "").strip():
             return "每个 step 的 text 与 command 至少一个非空"
+        if str(s.get("command") or "").strip():
+            has_command = True
+    if not has_command:
+        return "steps 里至少要有一条逐字来自原文的 command（原文含命令/代码）"
     for field in ("title", "intro", "learning_question"):
         if not str(data.get(field) or "").strip():
             return field + " 必须是非空字符串"
@@ -160,7 +182,9 @@ def _finish_tutorial(item: dict, url: str, art: dict, data: dict, recent_titles:
         return None, {"stage": "title", "status": "skip_quality", "reasons": ["no_usable_title"]}
     steps = data.get("steps") or []
     ctx = {"title": title, "item": item, "intro": data.get("intro"),
+           "environment": str(data.get("environment") or "").strip(),
            "prerequisites": data.get("prerequisites") or [], "steps": steps,
+           "troubleshooting": data.get("troubleshooting") or [],
            "pitfalls": data.get("pitfalls") or [], "takeaway": data.get("takeaway")}
     md = digest.render_tutorial_post(ctx).strip()
     errors = markdown_issues(md) + publication_markdown_issues(md)
@@ -183,15 +207,54 @@ def _finish_tutorial(item: dict, url: str, art: dict, data: dict, recent_titles:
             "item": item, "attempts": []}, None
 
 
+def _github_packet(item: dict):
+    """GitHub 仓库条目 → README 包（2026-10-31 实操栏目）：代码围栏=code 块。
+
+    README 即部署指南：比抓 github.com 页面（React 渲染，正文提取不稳）确定性
+    高得多；raw host 间歇超时由 _fetch_readme 的 fail-open 兜底→返回 None。
+    """
+    readme = _fetch_readme(_url(item))
+    if not readme:
+        return None
+    blocks, buf, fence = [], [], False
+    for line in readme.splitlines():
+        if line.strip().startswith("```"):
+            text = "\n".join(buf).strip()
+            if text:
+                blocks.append({"id": f"b{len(blocks) + 1}",
+                               "kind": "code" if fence else "paragraph", "text": text})
+            buf, fence = [], not fence
+            continue
+        buf.append(line)
+    text = "\n".join(buf).strip()
+    if text:
+        blocks.append({"id": f"b{len(blocks) + 1}",
+                       "kind": "code" if fence else "paragraph", "text": text})
+    return {"text": readme, "blocks": blocks, "title": item.get("title") or "",
+            "author": item.get("author") or "", "published_at": item.get("published_at")}
+
+
 def _produce_tutorial(item: dict, recent_titles: list[str]):
     """单候选生产：抓全文 → 契约 JSON（置顶+回喂重试）→ 命令逐字钳制 → 渲染。"""
     url = _url(item)
-    try:
-        art = extract.fetch_cached(item)
-    except Exception:
-        art = None
+    if urlsplit(url).hostname in {"github.com", "www.github.com"}:
+        art = _github_packet(item)
+    else:
+        try:
+            art = extract.fetch_cached(item)
+        except Exception:
+            art = None
     if not isinstance(art, dict) or not isinstance(art.get("text"), str) or not art["text"].strip():
         return None, {"stage": "fetch", "status": "skip_quality", "reasons": ["source_fetch_failed"]}
+    # 原文命令硬闸（2026-10-31 用户裁决「这不是实操帖」）：没有可执行内容的
+    # 课程介绍/学习路线永远写不出能动手的指南——在 LLM 之前直接拒，换下一候选。
+    blocks = art.get("blocks") if isinstance(art.get("blocks"), list) else []
+    code = [b for b in blocks if isinstance(b, dict) and b.get("kind") == "code"]
+    code_chars = sum(len(str(b.get("text") or "")) for b in code)
+    if not code or code_chars < 30:
+        return None, {"stage": "viability", "status": "skip_quality",
+                      "reasons": ["source_without_commands"],
+                      "detail": {"code_blocks": len(code), "code_chars": code_chars}}
     text, norm_text = art["text"], _norm_ws(art["text"])
     last = None
     for attempt in range(1 + CONTRACT_RETRIES):
@@ -232,7 +295,8 @@ def run_tutorial(candidates: list[dict], preference=None, pool=None, dry_run: bo
             if daily_ai.excluded_candidate(it):
                 continue
             row = scored.get(_url(it)) or {}
-            if tutorial_qualified(row):
+            frontier = (it.get("source") or "") in FRONTIER_REPO_SOURCES
+            if tutorial_qualified(row, frontier_repo=frontier):
                 total = row.get("total")
                 dims = row.get("dims") if isinstance(row.get("dims"), dict) else {}
                 audience = dims.get("audience")

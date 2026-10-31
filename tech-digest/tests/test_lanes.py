@@ -17,31 +17,54 @@ from app.pool import PoolStore
 SRC_TEXT = ("先安装依赖：\npip install requests\n然后运行服务：\n"
             "python main.py --port 8080\n注意本机 8080 被占用时会启动失败。\n"
             "默认账号是 admin。\n")
+
+SRC_BLOCKS = [
+    {"id": "b1", "kind": "paragraph", "text": "先安装依赖："},
+    {"id": "b2", "kind": "code", "text": "pip install requests"},
+    {"id": "b3", "kind": "paragraph", "text": "然后运行服务："},
+    {"id": "b4", "kind": "code", "text": "python main.py --port 8080"},
+    {"id": "b5", "kind": "paragraph", "text": "注意本机 8080 被占用时会启动失败。默认账号是 admin。"},
+]
+
+
+def src_packet(title, author="作者", published_at=None, blocks=None):
+    return {"text": SRC_TEXT, "title": title, "author": author,
+            "published_at": published_at, "blocks": SRC_BLOCKS if blocks is None else blocks}
+
+
 README_TEXT = ("# demo-kit\n一个把命令行输出变成网页面板的小工具。\n\n"
                "## 安装\n```\nnpm install -g demo-kit\n```\n\n## 使用\n```\ndemo-kit serve ./logs\n```\n")
 
 
-def tut_item(n=1):
-    return {"type": "news", "title": f"手把手教你部署本地知识库{n}", "source": "juejin",
-            "url": f"https://juejin.cn/post/{n}", "_pool_url": f"https://juejin.cn/post/{n}",
+def tut_item(n=1, source="juejin", url=None):
+    url = url or f"https://juejin.cn/post/{n}"
+    return {"type": "news", "title": f"手把手教你部署本地知识库{n}", "source": source,
+            "url": url, "_pool_url": url,
             "summary": "本地知识库部署教程", "author": "作者", "points": 50}
 
 
-def tut_scores(urls, total=0.7):
+def tut_scores(urls, total=0.7, article_type="tutorial"):
     dims = {"utility": 8, "depth": 5, "credibility": 8, "audience": 8, "novelty": 5}
-    return {u: {"dims": dict(dims), "total": total, "article_type": "tutorial",
+    return {u: {"dims": dict(dims), "total": total, "article_type": article_type,
                 "content_purpose": "tutorial", "kind": "judge"} for u in urls}
 
 
-def tutorial_reply(title="十分钟部署你的本地知识库", cmd=("pip install requests", "python main.py --port 8080")):
+def tutorial_reply(title="十分钟部署你的本地知识库",
+                   cmd=("pip install requests", "python main.py --port 8080", "")):
     return json.dumps({
         "title": title, "post_titles": [title],
         "learning_question": "怎么在本机跑起一个本地知识库",
+        "environment": "Linux 或 macOS，Python 3.10+",
         "prerequisites": ["装好 Python"],
         "intro": "跟做完你就能在自己电脑上跑起一个本地知识库。",
-        "steps": [{"heading": "安装依赖", "text": "先装 requests", "command": cmd[0]},
-                  {"heading": "启动服务", "text": "把服务跑起来", "command": cmd[1]}],
-        "pitfalls": ["端口冲突会导致启动失败"], "takeaway": "动手是最快的学习方式。"})
+        "steps": [
+            {"heading": "安装依赖", "text": "先装 requests，装完不报错即可。", "command": cmd[0]},
+            {"heading": "启动服务", "text": "把服务跑起来，看到监听 8080 即成功。", "command": cmd[1]},
+            {"heading": "访问页面", "text": "浏览器打开本地地址确认页面出现。", "command": cmd[2]},
+        ],
+        "troubleshooting": ["端口被占用会导致启动失败，换端口即可"],
+        "pitfalls": ["默认账号是 admin，记得改密码"],
+        "takeaway": "动手是最快的学习方式。"})
 
 
 def repo_item(n=1, full=None):
@@ -89,14 +112,21 @@ class TestTutorialQualified(LaneBase):
         self.assertFalse(lanes.tutorial_qualified({}))
         self.assertFalse(lanes.tutorial_qualified({"article_type": "tutorial", "dims": {"utility": True}}))
 
+    def test_frontier_repo_accepts_resource(self):
+        # github_ai 源：README 部署指南常被 judge 归 resource——前沿源放宽类型，
+        # 命令闸在生产侧把关；非前沿源的 resource 仍然不收。
+        good = {"article_type": "resource",
+                "dims": {"utility": 8, "depth": 5, "credibility": 8, "audience": 8, "novelty": 5}}
+        self.assertTrue(lanes.tutorial_qualified(good, frontier_repo=True))
+        self.assertFalse(lanes.tutorial_qualified(good, frontier_repo=False))
+
 
 class TestRunTutorial(LaneBase):
     @patch("app.llmpool.map_chat")
     @patch("app.extract.fetch_cached")
     def test_ready(self, fetch, chat):
         item = tut_item()
-        fetch.return_value = {"text": SRC_TEXT, "title": item["title"], "author": "作者",
-                              "published_at": "2026-10-30"}
+        fetch.return_value = src_packet(item["title"], published_at="2026-10-30")
         chat.return_value = [tutorial_reply()]
         with patch.object(lanes.editorial, "judge_score", return_value=tut_scores([item["_pool_url"]])):
             r = lanes.run_tutorial([item], pool=self.pool, recent_titles=[])
@@ -115,7 +145,7 @@ class TestRunTutorial(LaneBase):
     @patch("app.extract.fetch_cached")
     def test_contract_retry(self, fetch, chat):
         item = tut_item()
-        fetch.return_value = {"text": SRC_TEXT, "title": item["title"], "author": "", "published_at": None}
+        fetch.return_value = src_packet(item["title"], author="")
         chat.side_effect = [["不是JSON的正文"], [tutorial_reply()]]
         with patch.object(lanes.editorial, "judge_score", return_value=tut_scores([item["_pool_url"]])):
             r = lanes.run_tutorial([item], pool=self.pool, recent_titles=[])
@@ -126,9 +156,9 @@ class TestRunTutorial(LaneBase):
     @patch("app.extract.fetch_cached")
     def test_command_clamp_rejects_fabricated(self, fetch, chat):
         item = tut_item()
-        fetch.return_value = {"text": SRC_TEXT, "title": item["title"], "author": "", "published_at": None}
+        fetch.return_value = src_packet(item["title"], author="")
         # 编造的命令在两轮回喂后仍在 → 候选失败
-        chat.side_effect = [tutorial_reply(cmd=("pip install requests", "rm -rf / 编造命令"))] * 3
+        chat.side_effect = [tutorial_reply(cmd=("pip install requests", "rm -rf / 编造命令", ""))] * 3
         with patch.object(lanes.editorial, "judge_score", return_value=tut_scores([item["_pool_url"]])):
             r = lanes.run_tutorial([item], pool=self.pool, recent_titles=[])
         self.assertEqual(r["status"], "skip_quality")
@@ -139,8 +169,8 @@ class TestRunTutorial(LaneBase):
     @patch("app.extract.fetch_cached")
     def test_clamp_drops_empty_command_steps(self, fetch, chat):
         item = tut_item()
-        fetch.return_value = {"text": SRC_TEXT, "title": item["title"], "author": "", "published_at": None}
-        chat.return_value = [tutorial_reply(cmd=("pip install requests", ""))]
+        fetch.return_value = src_packet(item["title"], author="")
+        chat.return_value = [tutorial_reply(cmd=("pip install requests", "", ""))]
         with patch.object(lanes.editorial, "judge_score", return_value=tut_scores([item["_pool_url"]])):
             r = lanes.run_tutorial([item], pool=self.pool, recent_titles=[])
         self.assertEqual(r["status"], "ready")
@@ -154,7 +184,33 @@ class TestRunTutorial(LaneBase):
 
     @patch("app.llmpool.map_chat")
     @patch("app.extract.fetch_cached")
-    def test_fetch_failure_counts_as_failed_production(self, fetch, chat):
+    def test_source_without_commands_rejected(self, fetch, chat):
+        # 2026-10-31 用户裁决：课程介绍/学习路线类（原文无可执行内容）不配进实操栏目
+        item = tut_item()
+        fetch.return_value = src_packet(item["title"], blocks=[
+            {"id": "b1", "kind": "paragraph", "text": "观看视频了解整体流程。"}])
+        with patch.object(lanes.editorial, "judge_score", return_value=tut_scores([item["_pool_url"]])):
+            r = lanes.run_tutorial([item], pool=self.pool, recent_titles=[])
+        self.assertEqual(r["status"], "skip_quality")
+        self.assertEqual(r["reasons"], ["tutorial_production_failed"])
+        self.assertEqual(r["attempts"][0]["reasons"], ["source_without_commands"])
+        chat.assert_not_called()
+
+    @patch("app.llmpool.map_chat")
+    @patch("app.extract.fetch_cached")
+    def test_output_without_command_rejected(self, fetch, chat):
+        # 原文有命令但成稿一条没有 → 仍是导读不是指南，契约回喂后拒
+        item = tut_item()
+        fetch.return_value = src_packet(item["title"])
+        chat.side_effect = [tutorial_reply(cmd=("", "", ""))] * 3
+        with patch.object(lanes.editorial, "judge_score", return_value=tut_scores([item["_pool_url"]])):
+            r = lanes.run_tutorial([item], pool=self.pool, recent_titles=[])
+        self.assertEqual(r["status"], "skip_quality")
+        self.assertEqual(chat.call_count, 3)
+
+    @patch("app.llmpool.map_chat")
+    @patch("app.extract.fetch_cached")
+    def test_fetch_failure(self, fetch, chat):
         item = tut_item()
         fetch.side_effect = RuntimeError("HTTP 403")
         with patch.object(lanes.editorial, "judge_score", return_value=tut_scores([item["_pool_url"]])):
@@ -162,6 +218,38 @@ class TestRunTutorial(LaneBase):
         self.assertEqual(r["status"], "skip_quality")
         self.assertEqual(r["reasons"], ["tutorial_production_failed"])
         self.assertEqual(r["attempts"][0]["reasons"], ["source_fetch_failed"])
+        chat.assert_not_called()
+
+
+class TestGithubTutorial(LaneBase):
+    """github-ai 源：README 即部署指南（raw 抓取 + 围栏解析成 code 块）。"""
+
+    @patch("app.lanes._fetch_readme")
+    @patch("app.llmpool.map_chat")
+    def test_github_repo_ready(self, chat, readme):
+        item = tut_item(source="github-ai", url="https://github.com/a/demo-kit")
+        readme.return_value = README_TEXT
+        chat.return_value = [tutorial_reply(
+            title="部署 demo-kit：日志一键变看板",
+            cmd=("npm install -g demo-kit", "demo-kit serve ./logs", ""))]
+        scores = tut_scores([item["_pool_url"]], article_type="resource")
+        with patch.object(lanes.editorial, "judge_score", return_value=scores):
+            r = lanes.run_tutorial([item], pool=self.pool, recent_titles=[])
+        self.assertEqual(r["status"], "ready")
+        self.assertIn("npm install -g demo-kit", r["markdown"])
+        self.assertEqual(r["source_packet"]["verified_commands"],
+                         ["npm install -g demo-kit", "demo-kit serve ./logs"])
+
+    @patch("app.lanes._fetch_readme")
+    @patch("app.llmpool.map_chat")
+    def test_readme_without_fences_rejected(self, chat, readme):
+        item = tut_item(source="github-ai", url="https://github.com/a/awesome-list")
+        readme.return_value = "# Awesome\n- 收藏各种教程的列表\n- 没有命令\n"
+        scores = tut_scores([item["_pool_url"]], article_type="resource")
+        with patch.object(lanes.editorial, "judge_score", return_value=scores):
+            r = lanes.run_tutorial([item], pool=self.pool, recent_titles=[])
+        self.assertEqual(r["status"], "skip_quality")
+        self.assertEqual(r["attempts"][0]["reasons"], ["source_without_commands"])
         chat.assert_not_called()
 
 
@@ -228,8 +316,7 @@ class TestVerifyResult(LaneBase):
     def _ready(self):
         item = tut_item()
         with patch.object(lanes.extract, "fetch_cached",
-                          return_value={"text": SRC_TEXT, "title": item["title"],
-                                        "author": "作者", "published_at": None}), \
+                          return_value=src_packet(item["title"])), \
              patch.object(lanes.llmpool, "map_chat", return_value=[tutorial_reply()]), \
              patch.object(lanes.editorial, "judge_score",
                           return_value=tut_scores([item["_pool_url"]])):

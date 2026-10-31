@@ -231,6 +231,9 @@ def render_tutorial_post(ctx: dict) -> str:
     intro = str(ctx.get("intro") or "").strip()
     if intro:
         parts += [intro, ""]
+    env = str(ctx.get("environment") or "").strip()
+    if env:
+        parts += ["**适用环境**：" + env, ""]
     prereq = [str(p).strip() for p in ctx.get("prerequisites") or [] if str(p).strip()]
     if prereq:
         parts += ["**前置条件**：" + "、".join(prereq), ""]
@@ -245,6 +248,9 @@ def render_tutorial_post(ctx: dict) -> str:
             if command:
                 parts += ["", "```bash", command, "```"]
             parts += [""]
+    troubles = [str(p).strip() for p in ctx.get("troubleshooting") or [] if str(p).strip()]
+    if troubles:
+        parts += ["**常见问题**", ""] + [f"- {p}" for p in troubles] + [""]
     pits = [str(p).strip() for p in ctx.get("pitfalls") or [] if str(p).strip()]
     if pits:
         parts += ["**注意**", ""] + [f"- {p}" for p in pits] + [""]

@@ -153,7 +153,7 @@ def run_ingest(dry_run: bool = False) -> int:
 # 教程富矿源仅 7 条，judge 只能从企业运维内容里挑（选了 NVIDIA K8s 指南）。
 # 实操日为这些源追加保底席位（与深度源保底同一机制，池子存量 68/22/13/12/74 够用）。
 TUTORIAL_PRIORITY_SOURCES = {
-    "juejin": 5, "sspai": 3, "devto": 3, "freecodecamp": 3,
+    "github-ai": 4, "juejin": 5, "sspai": 3, "devto": 3, "freecodecamp": 3,
     "digitalocean": 3, "appinn": 3, "ruanyifeng": 2, "oschina": 2,
 }
 

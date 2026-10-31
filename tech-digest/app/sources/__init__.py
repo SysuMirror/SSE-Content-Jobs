@@ -66,6 +66,8 @@ KNOWN_SOURCES = {
     "openai-news": ("feeds", "fetch_openai"),
     "digitalocean": ("feeds", "fetch_digitalocean"),
     "appinn": ("feeds", "fetch_appinn"),
+    "qbitai": ("feeds", "fetch_qbitai"),
+    "github-ai": ("github_ai", "fetch"),
 }
 
 

@@ -102,7 +102,9 @@ class Settings:
         "netflix-tech", "cloudflare", "meta-eng", "meituan-tech",
         "nvidia-dev", "nvidia-research", "qwen-blog", "openai-news",
         # 2026-10-31 三类日报：实操教程源（DigitalOcean How-to + 小众软件工具/插件）
-        "digitalocean", "appinn"])
+        "digitalocean", "appinn",
+        # 2026-10-31 前沿 AI：量子位资讯 + GitHub topic 搜索的前沿 AI 仓库（README 部署指南）
+        "qbitai", "github-ai"])
     daily_publish: bool = field(default_factory=lambda: _get_bool("TECH_DIGEST_DAILY_PUBLISH", True))
     # 周末发帖开关（2026-09-13 用户决策）：默认关 —— 周末照常抓取入库（喂周报），但不发帖。
     publish_weekend: bool = field(default_factory=lambda: _get_bool("TECH_DIGEST_WEEKEND_PUBLISH", False))
@@ -157,7 +159,7 @@ class Settings:
                 "lobste-rs,the-verge,techcrunch,infoq,oschina,juejin,"
                 "netflix-tech,cloudflare,meta-eng,meituan-tech,"
                 "nvidia-dev,nvidia-research,qwen-blog,openai-news,"
-                "digitalocean,appinn").split(",") if s.strip()],
+                "digitalocean,appinn,qbitai,github-ai").split(",") if s.strip()],
             daily_publish=_get_bool("TECH_DIGEST_DAILY_PUBLISH", True),
             publish_weekend=_get_bool("TECH_DIGEST_WEEKEND_PUBLISH", False),
             daily_retain_days=int(os.environ.get("TECH_DIGEST_RETAIN_DAYS", "90")),
