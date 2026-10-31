@@ -34,8 +34,12 @@ TUTORIAL_HINT = (
     "本次为实操栏目初筛：article_type=tutorial 的候选按 utility=步骤可执行完整度、"
     "audience=一个大学生的上手可行性评分——用自己电脑或免费资源就能跟做=8-10，"
     "需要企业级集群/多卡 GPU/付费云才能跟做=4 以下；操作步骤本身不扣分。"
-    "优先前沿 AI 项目的本地部署与使用（本地大模型、视频生成、推理框架、AI Agent 工具），"
+    "优先前沿 AI 项目的本地部署与使用（本地大模型、视频生成、推理框架、AI Agent 工具、MCP），"
     "通用运维/旧工具/课程介绍/观看视频/学习路线降权（课程与资料汇总按 other 归类和低 utility）。"
+    "注意：github-ai 源的候选是开源仓库，summary 后附有该项目 README 摘要——"
+    "按「能否照着 README 把项目部署/跑起来」评分（utility=可跟做完整度，"
+    "audience=照 README 跑通难度：文档清晰、有安装启动命令=8-10；"
+    "文档残缺或需要魔改=4 以下；需要付费云/多卡集群=4 以下；单卡消费级 GPU 可接受）。"
     "教程=含可执行命令或配置的分步操作指南；research/mechanism/experiment 仍按研究标准评分。"
 )
 TUTORIAL_MIN_TOTAL = 6.5
@@ -212,8 +216,11 @@ def _github_packet(item: dict):
 
     README 即部署指南：比抓 github.com 页面（React 渲染，正文提取不稳）确定性
     高得多；raw host 间歇超时由 _fetch_readme 的 fail-open 兜底→返回 None。
+    judge 前已预抓的 README（item["_readme_text"]）直接复用，不重复下载。
     """
-    readme = _fetch_readme(_url(item))
+    readme = item.get("_readme_text") if isinstance(item.get("_readme_text"), str) else ""
+    if not readme:
+        readme = _fetch_readme(_url(item))
     if not readme:
         return None
     blocks, buf, fence = [], [], False
@@ -288,6 +295,16 @@ def run_tutorial(candidates: list[dict], preference=None, pool=None, dry_run: bo
     if own_pool:
         pool = PoolStore()
     try:
+        # judge 前预抓前沿仓库 README（2026-10-31 诊断）：judge 只看标题+描述时
+        # 把仓库全打成 other/低分（dims 2-4 实录），README 摘要注入 summary 后
+        # 才有「照 README 部署」的判断依据。抓失败不挡流程（摘要原样）。
+        for it in candidates:
+            if (it.get("source") or "") in FRONTIER_REPO_SOURCES and not it.get("_readme_text"):
+                readme = _fetch_readme(_url(it))
+                if readme:
+                    it["_readme_text"] = readme
+                    it["summary"] = ((it.get("summary") or "").strip()
+                                     + "\n\nREADME 摘要：\n" + readme[:1200]).strip()
         scored = editorial.judge_score(candidates, pool, preference, dry_run,
                                        lane_hint=TUTORIAL_HINT, salt=TUTORIAL_LANE)
         qualified = []
