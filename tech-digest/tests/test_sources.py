@@ -131,6 +131,17 @@ class TestRegistryContract(unittest.TestCase):
         self.assertNotIn("zhihu-hot", settings.tech_digest_sources)
         self.assertTrue(set(settings.tech_digest_sources) <= set(KNOWN_SOURCES))
 
+    def test_env_default_matches_dataclass_default(self):
+        # 2026-10-31 实锤：加新源只改了 dataclass 字段默认，漏了 from_env() 的兜底
+        # 字符串——pod 里实际生效的是后者（22 源跑了三班才发现）。两处默认必须一致。
+        import os
+        from unittest.mock import patch
+        from app.config import Settings
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("TECH_DIGEST_SOURCES", None)
+            self.assertEqual(Settings.from_env().tech_digest_sources,
+                             Settings().tech_digest_sources)
+
     def test_known_sources_resolvable(self):
         import importlib
         from app.sources import KNOWN_SOURCES

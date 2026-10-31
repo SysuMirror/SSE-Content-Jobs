@@ -156,7 +156,8 @@ class Settings:
                 "ars-technica,ieee-spectrum,freecodecamp,ruanyifeng,"
                 "lobste-rs,the-verge,techcrunch,infoq,oschina,juejin,"
                 "netflix-tech,cloudflare,meta-eng,meituan-tech,"
-                "nvidia-dev,nvidia-research,qwen-blog,openai-news").split(",") if s.strip()],
+                "nvidia-dev,nvidia-research,qwen-blog,openai-news,"
+                "digitalocean,appinn").split(",") if s.strip()],
             daily_publish=_get_bool("TECH_DIGEST_DAILY_PUBLISH", True),
             publish_weekend=_get_bool("TECH_DIGEST_WEEKEND_PUBLISH", False),
             daily_retain_days=int(os.environ.get("TECH_DIGEST_RETAIN_DAYS", "90")),
