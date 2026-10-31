@@ -246,7 +246,7 @@ def render_tutorial_post(ctx: dict) -> str:
             parts += [f"{i}. **{str(s['heading']).strip()}**" + (f"：{text}" if text else "")]
             command = str(s.get("command") or "").strip()
             if command:
-                parts += ["", "```bash", command, "```"]
+                parts += ["", "```", command, "```"]   # 不硬标语言：命令可能是 shell/Python/Cypher
             parts += [""]
     troubles = [str(p).strip() for p in ctx.get("troubleshooting") or [] if str(p).strip()]
     if troubles:

@@ -359,7 +359,7 @@ class TestRenderers(unittest.TestCase):
         md = lanes.digest.render_tutorial_post(self._tut_ctx()).strip()
         self.assertTrue(md.startswith("## 十分钟部署你的本地知识库"))
         self.assertIn("### 跟着做", md)
-        self.assertIn("```bash\npip install requests\n```", md)
+        self.assertIn("```\npip install requests\n```", md)
         self.assertIn("**前置条件**：装好 Python", md)
         self.assertIn("来源：[手把手教你部署本地知识库1](https://juejin.cn/post/1)", md)
         self.assertLessEqual(len(md), 9000)
