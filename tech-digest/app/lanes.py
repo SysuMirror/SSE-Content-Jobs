@@ -32,10 +32,14 @@ TUTORIAL_LANE, REPO_LANE, DEEP_LANE = "tutorial", "repo", "deep"
 # judge 实操栏目提示与评分缓存盐（salt 让同一候选在两种视角下各存各的评分）
 TUTORIAL_HINT = (
     "本次为实操栏目初筛：article_type=tutorial 的候选按 utility=步骤可跟做的完整度、"
-    "audience=学生可上手程度评分，操作步骤本身不扣分；research/mechanism/experiment "
-    "候选仍按研究标准评分。"
+    "audience=一个大学生的上手可行性评分——用自己电脑或免费资源就能跟做=8-10，"
+    "需要企业级集群/多卡 GPU/付费云才能跟做=4 以下；操作步骤本身不扣分；"
+    "research/mechanism/experiment 候选仍按研究标准评分。"
 )
 TUTORIAL_MIN_TOTAL = 6.5
+# 上手可行性硬线（2026-10-31 首日复盘）：AICR K8s 企业运维指南 audience≥6 混进
+# 合格线，实操栏目仍发「距学生太远」的稿——audience 口径同 TUTORIAL_HINT，线提到 7。
+TUTORIAL_MIN_AUDIENCE = 7
 CONTRACT_RETRIES = 2          # 首调之外最多带错误回喂次数（author/research 同款语义）
 PROMPT_TEXT_CAP = 18_000
 MAX_TRIED_CANDIDATES = 2
@@ -87,7 +91,8 @@ def tutorial_qualified(row: dict) -> bool:
     except (ValueError, TypeError):
         return False
     return (total >= TUTORIAL_MIN_TOTAL and _int0(dims.get("utility")) >= 7
-            and _int0(dims.get("audience")) >= 6 and _int0(dims.get("credibility")) >= 6)
+            and _int0(dims.get("audience")) >= TUTORIAL_MIN_AUDIENCE
+            and _int0(dims.get("credibility")) >= 6)
 
 
 def _repo_candidates(trending: list[dict], recent_blob: str) -> list[dict]:
@@ -229,9 +234,14 @@ def run_tutorial(candidates: list[dict], preference=None, pool=None, dry_run: bo
             row = scored.get(_url(it)) or {}
             if tutorial_qualified(row):
                 total = row.get("total")
-                qualified.append((total if isinstance(total, (int, float))
-                                  and not isinstance(total, bool) else 0.0, it))
-        qualified.sort(key=lambda p: -p[0])
+                dims = row.get("dims") if isinstance(row.get("dims"), dict) else {}
+                audience = dims.get("audience")
+                qualified.append(
+                    ((total if isinstance(total, (int, float)) and not isinstance(total, bool) else 0.0,
+                      audience if isinstance(audience, (int, float)) and not isinstance(audience, bool) else 0.0),
+                     it))
+        # 总分优先，audience 做次序键（同分时学生更好上手的先试）
+        qualified.sort(key=lambda p: (-p[0][0], -p[0][1]))
         attempts = []
         for _score, it in qualified[:MAX_TRIED_CANDIDATES]:
             try:

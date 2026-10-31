@@ -381,5 +381,34 @@ class TestTopCandidatesQuota(PoolTestBase):
         self.assertEqual(by_src.get("hacker-news"), 6)  # 配额封顶
 
 
+class TestTopCandidatesPrioritySources(PoolTestBase):
+    def test_priority_source_floor(self):
+        # 2026-10-31 实操栏目复盘：教程富矿源（掘金等）无热度信号时被 HN 热文
+        # 挤出粗排 top——priority_sources 追加保底席位，默认 None=行为不变。
+        hn = [_news(t, source="hacker-news", points=1000 - i) for i, t in enumerate([
+            "Redis 事件循环与管道延迟的实测分析",
+            "Kafka 分区再均衡的坑与修复路径",
+            "Postgres 查询计划器如何选择索引",
+            "gRPC 长连接在弱网下的重连策略",
+            "LLVM 寄存器分配的两代算法对比",
+            "WebGPU 着色器编译管线的坑",
+            "eBPF 观测内核锁竞争的实操",
+            "io_uring 与 epoll 的吞吐差距从哪来",
+            "ZGC 毫秒级停顿的着色指针原理",
+            "Arrow 列式内存布局对缓存命中率的影响",
+            "Torch 编译模式在推理侧的收益实测",
+            "Ray 分布式调度器的故障恢复设计",
+        ])]
+        jj = [_news(t, source="juejin") for t in (
+            "手把手教你在本地部署知识库",
+            "用 Docker 一键搭起个人网盘",
+            "十款好用的浏览器插件实测")]
+        self.store.upsert_news(hn + jj)
+        base = self.store.top_candidates(limit=6)
+        self.assertEqual(sum(1 for c in base if c["source"] == "juejin"), 0)   # 默认被挤掉
+        cands = self.store.top_candidates(limit=6, priority_sources={"juejin": 3})
+        self.assertEqual(sum(1 for c in cands if c["source"] == "juejin"), 3)  # 保底 3 席
+
+
 if __name__ == "__main__":
     unittest.main()

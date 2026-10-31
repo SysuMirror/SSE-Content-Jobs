@@ -80,6 +80,9 @@ class TestTutorialQualified(LaneBase):
         # 实用性不足
         low = {**good, "dims": {**good["dims"], "utility": 5}}
         self.assertFalse(lanes.tutorial_qualified(low))
+        # 上手可行性硬线（2026-10-31 首日复盘：企业级运维内容 audience=6 混进合格线）
+        hard = {**good, "dims": {**good["dims"], "audience": 6}}
+        self.assertFalse(lanes.tutorial_qualified(hard))
         # 总分不足（全 6 = 6.0 < 6.5）
         flat = {**good, "dims": dict.fromkeys(good["dims"], 6)}
         self.assertFalse(lanes.tutorial_qualified(flat))

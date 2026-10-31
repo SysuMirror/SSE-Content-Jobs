@@ -149,7 +149,17 @@ def run_ingest(dry_run: bool = False) -> int:
         store.close()
 
 
-def _pool_daily_materials() -> tuple[list[dict], list[dict]] | None:
+# 实操栏目候选保底（2026-10-31 复盘）：首日样稿暴露粗排偏科——top60 里 HN 52 条、
+# 教程富矿源仅 7 条，judge 只能从企业运维内容里挑（选了 NVIDIA K8s 指南）。
+# 实操日为这些源追加保底席位（与深度源保底同一机制，池子存量 68/22/13/12/74 够用）。
+TUTORIAL_PRIORITY_SOURCES = {
+    "juejin": 5, "sspai": 3, "devto": 3, "freecodecamp": 3,
+    "ruanyifeng": 2, "oschina": 2,
+}
+
+
+def _pool_daily_materials(priority_sources: dict[str, int] | None = None
+                          ) -> tuple[list[dict], list[dict]] | None:
     """daily 的池模式取材（D6）：(粗排候选, 最近 trending 快照)。
 
     空池返回 None、池故障打日志后返回 None——调用方即时抓取候选，
@@ -158,7 +168,8 @@ def _pool_daily_materials() -> tuple[list[dict], list[dict]] | None:
     ps = None
     try:
         ps = PoolStore()
-        cands = ps.top_candidates(limit=POOL_CANDIDATE_LIMIT)
+        cands = ps.top_candidates(limit=POOL_CANDIDATE_LIMIT,
+                                  priority_sources=priority_sources)
         # 知乎治理（2026-10-14 读取侧 → 2026-10-15 池层 DEAD_SOURCES 前置剔除，
         # 知乎不再占用配额席位）；此处留日志面。
         _n0 = len(cands)
@@ -499,7 +510,9 @@ def run_daily(force: bool, dry_run: bool = False, private: bool = False,
         dedup_info = {"removed": []}
         pool_mode = False
         try:
-            material = _pool_daily_materials()
+            lanes_today = _today_lanes(day)
+            priority = TUTORIAL_PRIORITY_SOURCES if lanes_today[0] == "tutorial" else None
+            material = _pool_daily_materials(priority)
             pool_mode = material is not None
             if material is not None:
                 news, trending = material
@@ -524,7 +537,7 @@ def run_daily(force: bool, dry_run: bool = False, private: bool = False,
             # 三类日报排班（2026-10-31）：主类型失败按保发顺序顶上，深读全链兜底。
             # 任一 lane ready 即定稿；全灭按「是否有内容性拒绝」区分 skip/generation。
             result, lane_trials = None, []
-            for lane in _today_lanes(day):
+            for lane in lanes_today:
                 if lane == "deep":
                     r = editorial.run_pipeline(candidates, preference=pref, dry_run=dry_run,
                                                recent_titles=recent)

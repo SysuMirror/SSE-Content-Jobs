@@ -246,11 +246,15 @@ class PoolStore:
     # ---------- 取材（daily / star） ----------
 
     def top_candidates(self, limit: int = 24,
-                       window_days: int | None = None) -> list[dict]:
+                       window_days: int | None = None,
+                       priority_sources: dict[str, int] | None = None) -> list[dict]:
         """粗排 candidate（D4 公式 + 2026-10-15 两遍选取），返回 v2 条目。
 
         选法：①死源/过期面在 SQL 层剔除；②深度源每源保底 2 席（无投票热度的
         订阅系/工程博客靠纯排名进不了 judge 视野）；③全局排名补满，单源配额封顶。
+        priority_sources（2026-10-31 实操栏目）：{source: floor} 追加保底席位——
+        教程富矿源（掘金/少派/devto/fcc 等）在粗排被 HN/媒体挤出 top32 的
+        实测（7/60）倒逼；与深度源保底同一遍扫描，默认 None=行为不变。
         空池返回 []——调用方据此回退老路径，永不因池空停刊（D6）。
         """
         from app.daily_ai import excluded_candidate
@@ -273,6 +277,12 @@ class PoolStore:
             score = r["heat"] + r["source_weight"] * 10 - age * 5
             scored.append((score, r))
         scored.sort(key=lambda p: -p[0])
+        floors = {src: DEPTH_FLOOR_PER_SOURCE for src in DEPTH_SOURCES}
+        for src, floor in (priority_sources or {}).items():
+            try:
+                floors[src] = max(floors.get(src, 0), int(floor))
+            except (TypeError, ValueError):
+                continue
         out, per_src, picked = [], defaultdict(int), set()
 
         def admit(score, r, it):
@@ -283,14 +293,14 @@ class PoolStore:
             picked.add(r["url"])
             per_src[it.get("source") or ""] += 1
 
-        for score, r in scored:   # 深度源保底
+        for score, r in scored:   # 深度源/优先级源保底
             if len(out) >= limit:
                 break
             it = json.loads(r["raw"])
             if excluded_candidate(it):
                 continue
             src = it.get("source") or ""
-            if src in DEPTH_SOURCES and per_src[src] < DEPTH_FLOOR_PER_SOURCE:
+            if src in floors and per_src[src] < floors[src]:
                 admit(score, r, it)
         for score, r in scored:   # 全局排名补满
             if len(out) >= limit:
