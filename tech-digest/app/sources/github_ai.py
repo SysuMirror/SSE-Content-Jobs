@@ -14,7 +14,10 @@ from app.fetcher import http_get
 from app.sources import new_item
 
 SEARCH_URL = "https://api.github.com/search/repositories"
-TOPICS = ("local-llm", "text-to-video", "llm-inference")
+# 2026-10-31 用户裁决补 Agent 向：「更偏本地自己部署」——AI Agent / MCP 是
+# 当前最活跃的可自部署方向；6 个 topic × 8 条，未认证 search 限 10 次/分钟安全。
+TOPICS = ("local-llm", "text-to-video", "llm-inference",
+          "ai-agents", "mcp", "autonomous-agents")
 PER_QUERY = 8
 MIN_STARS = 500
 FRESH_DAYS = 45
