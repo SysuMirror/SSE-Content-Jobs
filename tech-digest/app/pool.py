@@ -38,6 +38,8 @@ SOURCE_WEIGHT = {
     "the-verge": 6, "techcrunch": 6, "infoq": 6, "oschina": 6,
     "netflix-tech": 8, "cloudflare": 8, "meta-eng": 8, "meituan-tech": 8,
     "nvidia-dev": 8, "nvidia-research": 8, "qwen-blog": 8, "openai-news": 6,
+    # 2026-10-31 三类日报：实操教程源（DigitalOcean 官方教程 / 小众软件工具社区）
+    "digitalocean": 7, "appinn": 7,
 }
 DEFAULT_SOURCE_WEIGHT = 5
 HEAT_DEFAULT = 50.0          # 无热度信号的源（订阅系）保底可见分

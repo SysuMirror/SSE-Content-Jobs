@@ -42,6 +42,11 @@ NVIDIA_URL = "https://developer.nvidia.com/blog/feed/"
 NVIDIA_R_URL = "https://research.nvidia.com/rss.xml"
 QWEN_URL = "https://qwenlm.github.io/blog/index.xml"
 OPENAI_URL = "https://openai.com/news/rss.xml"
+# 2026-10-31 三类日报：实操教程源（服务器当日实测 200；reddit 数据中心 IP 000、
+# 52pojie 403、awesome-selfhosted 无 RSS、v2ex/linux.cn 000、hackaday 偏硬件
+# DIY 未接、hellogithub/selfh.st 是月刊合集不是单篇教程未接）
+DIGITALOCEAN_URL = "https://www.digitalocean.com/community/tutorials/feed"
+APPINN_URL = "https://www.appinn.com/feed/"
 
 _NS_CONTENT = "{http://purl.org/rss/1.0/modules/content/}encoded"
 _NS_DC_CREATOR = "{http://purl.org/dc/elements/1.1/}creator"
@@ -199,3 +204,12 @@ def fetch_qwen() -> tuple[list[dict], str, dict]:
 
 def fetch_openai() -> tuple[list[dict], str, dict]:
     return fetch_feed("openai-news", OPENAI_URL, 10)
+
+
+def fetch_digitalocean() -> tuple[list[dict], str, dict]:
+    # feed 约 5MB（含全文），15s 超时内实测可下载；keep 上限压到 15 条
+    return fetch_feed("digitalocean", DIGITALOCEAN_URL, 15)
+
+
+def fetch_appinn() -> tuple[list[dict], str, dict]:
+    return fetch_feed("appinn", APPINN_URL, 15)

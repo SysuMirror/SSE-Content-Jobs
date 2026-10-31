@@ -109,6 +109,8 @@ class TestNewFeeds(unittest.TestCase):
             (feeds.fetch_nvidia_research, "nvidia-research", feeds.NVIDIA_R_URL),
             (feeds.fetch_qwen, "qwen-blog", feeds.QWEN_URL),
             (feeds.fetch_openai, "openai-news", feeds.OPENAI_URL),
+            (feeds.fetch_digitalocean, "digitalocean", feeds.DIGITALOCEAN_URL),
+            (feeds.fetch_appinn, "appinn", feeds.APPINN_URL),
         ]
         for fn, source, url in cases:
             with self.subTest(source=source):

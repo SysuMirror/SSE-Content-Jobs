@@ -100,7 +100,9 @@ class Settings:
         "ars-technica", "ieee-spectrum", "freecodecamp", "ruanyifeng",
         "lobste-rs", "the-verge", "techcrunch", "infoq", "oschina", "juejin",
         "netflix-tech", "cloudflare", "meta-eng", "meituan-tech",
-        "nvidia-dev", "nvidia-research", "qwen-blog", "openai-news"])
+        "nvidia-dev", "nvidia-research", "qwen-blog", "openai-news",
+        # 2026-10-31 三类日报：实操教程源（DigitalOcean How-to + 小众软件工具/插件）
+        "digitalocean", "appinn"])
     daily_publish: bool = field(default_factory=lambda: _get_bool("TECH_DIGEST_DAILY_PUBLISH", True))
     # 周末发帖开关（2026-09-13 用户决策）：默认关 —— 周末照常抓取入库（喂周报），但不发帖。
     publish_weekend: bool = field(default_factory=lambda: _get_bool("TECH_DIGEST_WEEKEND_PUBLISH", False))

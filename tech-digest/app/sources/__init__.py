@@ -64,6 +64,8 @@ KNOWN_SOURCES = {
     "nvidia-research": ("feeds", "fetch_nvidia_research"),
     "qwen-blog": ("feeds", "fetch_qwen"),
     "openai-news": ("feeds", "fetch_openai"),
+    "digitalocean": ("feeds", "fetch_digitalocean"),
+    "appinn": ("feeds", "fetch_appinn"),
 }
 
 

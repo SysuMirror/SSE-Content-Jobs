@@ -154,7 +154,7 @@ def run_ingest(dry_run: bool = False) -> int:
 # 实操日为这些源追加保底席位（与深度源保底同一机制，池子存量 68/22/13/12/74 够用）。
 TUTORIAL_PRIORITY_SOURCES = {
     "juejin": 5, "sspai": 3, "devto": 3, "freecodecamp": 3,
-    "ruanyifeng": 2, "oschina": 2,
+    "digitalocean": 3, "appinn": 3, "ruanyifeng": 2, "oschina": 2,
 }
 
 
