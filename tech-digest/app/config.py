@@ -118,6 +118,10 @@ class Settings:
     reserved_ttl_days: int = 90       # reserved 保留天数
     review_threshold: float = 0.7     # M2 终审打回线（本期仅入配置）
     reserve_score: float = 0.8        # M2 高价值沉淀线（本期仅入配置）
+    # ---- 三类日报排班（2026-10-31，周一=0）：默认全 deep=行为与改造前完全一致；
+    # 生产 env TECH_DIGEST_WEEK_PLAN=deep,tutorial,repo,deep,repo,tutorial,deep。
+    # 启用面=week_plan 里出现过的类型（main._today_lanes），未武装时轻链不跑。
+    week_plan: list[str] = field(default_factory=lambda: ["deep"] * 7)
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -161,6 +165,9 @@ class Settings:
             reserved_ttl_days=int(os.environ.get("TECH_DIGEST_RESERVED_TTL_DAYS", "90")),
             review_threshold=float(os.environ.get("TECH_DIGEST_REVIEW_THRESHOLD", "0.7")),
             reserve_score=float(os.environ.get("TECH_DIGEST_RESERVE_SCORE", "0.8")),
+            week_plan=[s.strip().lower() for s in os.environ.get(
+                "TECH_DIGEST_WEEK_PLAN",
+                "deep,deep,deep,deep,deep,deep,deep").split(",") if s.strip()] or ["deep"] * 7,
         )
         _apply_state_overrides(s)
         return s

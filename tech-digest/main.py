@@ -4,7 +4,8 @@
 用法:
   python main.py ingest                 # 高频抓取入池（每 2h 一班，零 LLM；编辑部 M1）
   python main.py ingest --dry-run       # 跑完整抓取/查重链路但零写池（门禁用）
-  python main.py daily                  # 单篇研究学习文章，经审核与最终检查后落盘、发帖
+  python main.py daily                  # 按星期排班发帖（2026-10-31 三类日报）：
+                                        # 深读/实操/开源仓，主类型失败按保发顺序顶上
   python main.py daily --dry-run        # 审核通过后落盘，仍有日志/清理/采样及 token 校验
   python main.py daily --force          # 未发布快照允许重试；已发布则立即退出
   python main.py daily --private        # 日报作为私密帖发布（默认公开帖）
@@ -45,7 +46,7 @@ from hashlib import sha256
 from logging.handlers import RotatingFileHandler
 from uuid import uuid4
 
-from app import daily_ai, dedup, editorial, marketdb, preference, publication_gate
+from app import daily_ai, dedup, editorial, extract, lanes, marketdb, preference, publication_gate
 from app.config import settings
 from app.digest import render_star_post
 from app.dedup import normalize_url
@@ -193,6 +194,27 @@ def _pool_star_trending() -> list[dict]:
     finally:
         if ps is not None:
             ps.close()
+
+
+# 三类日报排班（2026-10-31，周一=0）：深读×3 + 实操×2 + 开源仓×2，
+# 见 docs/superpowers/plans/2026-10-31-three-lane-digest.md。
+# 启用面=week_plan 里出现过的类型（默认全 deep：env 未武装时行为与改造前
+# 完全一致，测试与回滚都稳）；主类型失败按 repo → tutorial → deep 顶上
+# （深读全链兜底能力最强放最后），未启用的类型不顶。
+_LANE_FALLBACK = ("repo", "tutorial", "deep")
+_VALID_LANES = frozenset({"deep", "tutorial", "repo"})
+
+
+def _today_lanes(day: str) -> list[str]:
+    """当天发帖类型队列：主类型在前，保发顶替顺序在后。"""
+    try:
+        wd = date.fromisoformat(day).weekday()
+    except ValueError:
+        wd = 0
+    plan = settings.week_plan or []
+    enabled = {lane for lane in plan if lane in _VALID_LANES} | {"deep"}
+    primary = plan[wd] if wd < len(plan) and plan[wd] in enabled else "deep"
+    return [primary] + [lane for lane in _LANE_FALLBACK if lane != primary and lane in enabled]
 
 
 def _mark_pool_consumed(item: dict, day: str) -> None:
@@ -413,8 +435,13 @@ def _sample_views(store: Store) -> None:
 
 
 def _daily_publication_decision(result) -> dict:
-    """生产者 ready 与独立验证的 ready 必须同时满足。"""
+    """生产者 ready 与独立验证的 ready 必须同时满足（轻链走 lanes.verify_result）。"""
     packet = result if isinstance(result, dict) else {}
+    if packet.get("lane") in ("tutorial", "repo"):
+        try:
+            return lanes.verify_result(packet)
+        except Exception as exc:  # noqa: BLE001
+            return {"status": "generation_error", "reasons": ["lane_verify_error", str(exc)[:200]]}
     try:
         decision = publication_gate.decide_publication(
             packet.get("title"), packet.get("markdown"), packet.get("draft"),
@@ -493,7 +520,31 @@ def run_daily(force: bool, dry_run: bool = False, private: bool = False,
             pref = preference.load_preference()
             recent = store.recent_daily_titles(7, before_day=day)
             candidates = news if pool_mode else _daily_candidates(news)
-            result = editorial.run_pipeline(candidates, preference=pref, dry_run=dry_run, recent_titles=recent)
+            extract.clear_fetch_cache()
+            # 三类日报排班（2026-10-31）：主类型失败按保发顺序顶上，深读全链兜底。
+            # 任一 lane ready 即定稿；全灭按「是否有内容性拒绝」区分 skip/generation。
+            result, lane_trials = None, []
+            for lane in _today_lanes(day):
+                if lane == "deep":
+                    r = editorial.run_pipeline(candidates, preference=pref, dry_run=dry_run,
+                                               recent_titles=recent)
+                elif lane == "tutorial":
+                    r = lanes.run_tutorial(candidates, preference=pref, dry_run=dry_run,
+                                           recent_titles=recent)
+                else:
+                    r = lanes.run_repo(trending, recent, dry_run=dry_run)
+                lane_trials.append({"lane": lane, "status": (r or {}).get("status", "generation_error"),
+                                    "reasons": (r or {}).get("reasons", [])})
+                if isinstance(r, dict) and r.get("status") == "ready":
+                    result = r
+                    break
+            if result is not None:
+                result["lane_trials"] = lane_trials
+            else:
+                statuses = {t["status"] for t in lane_trials}
+                result = {"status": "skip_quality" if "skip_quality" in statuses else "generation_error",
+                          "reasons": ["all_lanes_failed"] + [f"{t['lane']}:{t['status']}" for t in lane_trials],
+                          "draft": None, "source_packet": None, "review": None, "attempts": lane_trials}
         except Exception as exc:  # 原文、模型、生成失败均不允许旧内容路径补位
             result = {"status": "generation_error", "reasons": ["pipeline_exception", str(exc)[:200]],
                       "draft": None, "source_packet": None, "review": None, "attempts": []}
@@ -532,9 +583,13 @@ def run_daily(force: bool, dry_run: bool = False, private: bool = False,
             issue_no = store.save_daily_v2(day, news + trending, str(out), post_title=title)
         store.cleanup()
         src_errors = {name: data["error"] for name, data in stats.items() if data.get("error")}
+        lane = result.get("lane", "deep")
         store.log("daily", "degraded" if src_errors else "ok", {
-            "material": "pool" if pool_mode else "live", "pipeline": "editorial",
-            "content_version": "research-v1", "article_type": draft["article_type"],
+            "material": "pool" if pool_mode else "live",
+            "pipeline": "editorial" if lane == "deep" else "lanes",
+            "lane": lane, "lane_trials": result.get("lane_trials", []),
+            "content_version": {"deep": "research-v1", "tutorial": "tutorial-v1", "repo": "repo-v1"}[lane],
+            "article_type": draft["article_type"],
             "learning_question": draft["learning_question"], "review_score": decision.get("score"),
             "source_hash": source["source_hash"], "draft_hash": review["draft_hash"],
             "source_stats": {name: {k: v for k, v in data.items() if k != "detail"} for name, data in stats.items()},
@@ -549,7 +604,7 @@ def run_daily(force: bool, dry_run: bool = False, private: bool = False,
                                                    "evidence_count": len(draft["evidence_ids"]),
                                                    "source_hash": source["source_hash"],
                                                    "draft_hash": review["draft_hash"]})
-        if publish_result == "published" and not dry_run:
+        if publish_result == "published" and not dry_run and item:
             _mark_pool_consumed(item, day)
         _sample_views(store)
         return 1 if publish_result == "failed" else 0

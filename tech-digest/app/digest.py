@@ -219,6 +219,95 @@ def render_repost(day: str, issue_no: int, ctx: dict) -> str:
     return strip_emoji("\n".join(parts))
 
 
+def render_tutorial_post(ctx: dict) -> str:
+    """实操栏目渲染（2026-10-31 三类日报）：把轻链产物排成学生向动手导读。
+
+    ctx: {title, item, intro, prerequisites[], steps[{heading,text,command}],
+    pitfalls[], takeaway}。steps[].command 已在生产侧做过逐字钳制。
+    纯 markdown，无裸 HTML，emoji 禁令照旧。
+    """
+    item = ctx.get("item") or {}
+    parts = ["## " + str(ctx.get("title") or "").strip(), ""]
+    intro = str(ctx.get("intro") or "").strip()
+    if intro:
+        parts += [intro, ""]
+    prereq = [str(p).strip() for p in ctx.get("prerequisites") or [] if str(p).strip()]
+    if prereq:
+        parts += ["**前置条件**：" + "、".join(prereq), ""]
+    steps = [s for s in ctx.get("steps") or []
+             if isinstance(s, dict) and str(s.get("heading") or "").strip()]
+    if steps:
+        parts += ["### 跟着做", ""]
+        for i, s in enumerate(steps, 1):
+            text = str(s.get("text") or "").strip()
+            parts += [f"{i}. **{str(s['heading']).strip()}**" + (f"：{text}" if text else "")]
+            command = str(s.get("command") or "").strip()
+            if command:
+                parts += ["", "```bash", command, "```"]
+            parts += [""]
+    pits = [str(p).strip() for p in ctx.get("pitfalls") or [] if str(p).strip()]
+    if pits:
+        parts += ["**注意**", ""] + [f"- {p}" for p in pits] + [""]
+    takeaway = str(ctx.get("takeaway") or "").strip()
+    if takeaway:
+        parts += [takeaway, ""]
+    attr = (f"来源：[{_reader_source_text(item.get('title'), '原文')}]"
+            f"({_reader_url(item.get('url') or '')})")
+    if item.get("author"):
+        attr += " · " + _reader_source_text(item.get("author"))
+    parts += ["---", attr, "原文日期：" + _reader_source_date(item.get("published_at")),
+              "本文由 AI 辅助整理自原教程；命令均摘自原文，环境不同请以原文为准。", ""]
+    return strip_emoji("\n".join(parts))
+
+
+def render_repo_post(ctx: dict) -> str:
+    """开源仓介绍渲染（2026-10-31 三类日报）。纯 markdown，无裸 HTML。
+
+    ctx: {title, item, intro, highlights[], start_note, command, for_whom,
+    simple}。simple=True 表示 README 未能抓取，介绍仅基于仓库描述。
+    """
+    item = ctx.get("item") or {}
+    t = item.get("trending") or {}
+    name = str(item.get("title") or "").strip()
+    parts = ["## " + str(ctx.get("title") or "").strip(), ""]
+    intro = str(ctx.get("intro") or "").strip()
+    if intro:
+        parts += [intro, ""]
+    highlights = [str(h).strip() for h in ctx.get("highlights") or [] if str(h).strip()]
+    if highlights:
+        parts += ["**亮点**", ""] + [f"- {h[:160]}" for h in highlights] + [""]
+    note = str(ctx.get("start_note") or "").strip()
+    command = str(ctx.get("command") or "").strip()
+    if note or command:
+        parts += ["**上手**", ""]
+        if note:
+            parts += [note, ""]
+        if command:
+            parts += ["```bash", command, "```", ""]
+    who = str(ctx.get("for_whom") or "").strip()
+    if who:
+        parts += ["**适合谁**：" + who, ""]
+    heat = f"GitHub 今日 +{_int0(t.get('today_stars')):,} star"
+    if t.get("language"):
+        heat += f" · {t['language']}"
+    if _int0(t.get("stars")):
+        heat += f" · 累计 {_int0(t.get('stars')):,}"
+    parts += [heat, ""]
+    if ctx.get("simple"):
+        parts += ["README 未能抓取，以上介绍基于仓库描述；上手方式请进仓库查看。", ""]
+    parts += ["---",
+              f"来源：[{_reader_source_text(name, 'GitHub 仓库')}]({_reader_url(item.get('url') or '')})",
+              "本文由 AI 辅助整理自项目 README；以仓库最新说明为准。", ""]
+    return strip_emoji("\n".join(parts))
+
+
+def _int0(value) -> int:
+    try:
+        return int(str(value).replace(",", "").strip() or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _star_entry_md(it: dict, desc_map: dict[str, str]) -> str:
     """榜单条目 → 两行 markdown：名字行（名次+链接+今日⭐+语言）+ 一句话简介。
 
