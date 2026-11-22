@@ -6,6 +6,7 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 SRC=$(CDPATH= cd -- "$HERE/.." && pwd)
 ROOT=${CONTENT_JOBS_ROOT:-/home/cloud/content-jobs}
 . "$ROOT/env.sh"
+export PYTHONPATH="$ROOT/vendor${PYTHONPATH:+:$PYTHONPATH}"
 mkdir -p "$ROOT/state/tech-digest-data"
 ln -sfn "$ROOT/state/tech-digest-data" "$SRC/tech-digest/data"
 cd "$SRC/tech-digest"
