@@ -7,4 +7,4 @@ ROOT=${CONTENT_JOBS_ROOT:-/home/cloud/content-jobs}
 mkdir -p "$ROOT/state/post-curator-data"
 ln -sfn "$ROOT/state/post-curator-data" "$SRC/post-curator/data"
 cd "$SRC/post-curator"
-exec "$ROOT/venv/bin/python" main.py scan "$@"
+exec python3 main.py scan "$@"

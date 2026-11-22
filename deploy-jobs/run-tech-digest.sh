@@ -13,4 +13,4 @@ if [ "$TASK" = "star" ] || [ "$TASK" = "weekly" ]; then
   sed -i 's/"reasoning_effort": "none"/"reasoning_effort": "low"/' app/llm.py || true
   trap 'git -C "$SRC" checkout -- tech-digest/app/llm.py 2>/dev/null || true' EXIT
 fi
-exec "$ROOT/venv/bin/python" main.py "$TASK" "$@"
+exec python3 main.py "$TASK" "$@"
