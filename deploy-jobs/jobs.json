@@ -1,0 +1,16 @@
+{
+  "schedules": [
+    {"job": "tech-digest-ingest", "cron": "7 */2 * * *"},
+    {"job": "tech-digest-daily", "cron": "15 9 * * *"},
+    {"job": "tech-digest-star", "cron": "25 9 * * 6"},
+    {"job": "tech-digest-weekly", "cron": "0 10 * * 0"},
+    {"job": "post-curator-daily", "cron": "20 10 * * *"}
+  ],
+  "commands": {
+    "tech-digest-ingest": "deploy-jobs/run-tech-digest.sh ingest",
+    "tech-digest-daily": "deploy-jobs/run-tech-digest.sh daily",
+    "tech-digest-star": "deploy-jobs/run-tech-digest.sh star",
+    "tech-digest-weekly": "deploy-jobs/run-tech-digest.sh weekly",
+    "post-curator-daily": "deploy-jobs/run-post-curator.sh"
+  }
+}
