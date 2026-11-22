@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import socket
 import subprocess
 import time
 from datetime import datetime, timedelta
@@ -15,6 +16,27 @@ LOG_DIR = ROOT / "logs"
 STATE = ROOT / "scheduler-state.json"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 RUNNING = {}
+
+
+TUNNEL_KEY = "/home/cloud/.ssh/content_tunnel"
+TUNNEL_TARGET = "root@175.178.90.215"
+TUNNEL_PORT = 18080
+
+
+def ensure_tunnel():
+    if not os.path.exists(TUNNEL_KEY):
+        return
+    try:
+        with socket.create_connection(("127.0.0.1", TUNNEL_PORT), timeout=2):
+            return
+    except OSError:
+        pass
+    subprocess.Popen(
+        ["ssh", "-f", "-N", "-o", "ExitOnForwardFailure=yes",
+         "-o", "StrictHostKeyChecking=yes", "-i", TUNNEL_KEY,
+         "-L", f"{TUNNEL_PORT}:127.0.0.1:8080", TUNNEL_TARGET],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
 
 
 def log(msg):
@@ -55,6 +77,7 @@ def main():
     commands = jobs.get("commands") or {}
     log(f"content scheduler started repo={REPO} jobs={len(schedules)}")
     while True:
+        ensure_tunnel()
         now = datetime.now().replace(second=0, microsecond=0)
         state = load_state()
         changed = False
